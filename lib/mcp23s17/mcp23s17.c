@@ -1,9 +1,10 @@
 #include <mcp23s17.h>
 
-// for vscode c_cpp_extention
-#ifdef __INTELLISENSE__
-#include "build/include/sdkconfig.h"
-#endif
+
+// SPI通信用のバッファ
+uint8_t *spi_buf;
+
+static const char TAG[] = "mcp23s17";
 
 // MCP23S17の初期化
 void mcp23s17_init(void){
@@ -16,10 +17,10 @@ void mcp23s17_init(void){
 
     // SPIバスの設定用変数
     spi_bus_config_t buscfg={
-        // MISOのGPIOの番号を設定
-        .miso_io_num = PIN_NUM_MISO,
         // MOSIのGPIOの番号を設定
         .mosi_io_num = PIN_NUM_MOSI,
+        // MISOのGPIOの番号を設定
+        .miso_io_num = PIN_NUM_MISO,
         // SCKのGPIOの番号を設定
         .sclk_io_num = PIN_NUM_CLK,
         // WP(ライトプロテクト)のGPIOの番号を設定(使用しない場合は-1に設定)
@@ -39,20 +40,20 @@ void mcp23s17_init(void){
 
     // SPIバスのMCP23S17(1番目)に関連する設定
     mcp23s17_config_t mcp23s17_1_config = {
-        // CSのGPIOの番号を設定 
-        .cs_io = PIN_NUM_CS1,
         // 使用するSPIのペリフェラルを設定
         .host = MCP23S17_HOST,
+        // CSのGPIOの番号を設定 
+        .cs_io = PIN_NUM_CS1,
         // MISOのGPIOの番号を設定
         .miso_io = PIN_NUM_MISO,
     };
 
     // SPIバスのMCP23S17(2番目)に関連する設定
     mcp23s17_config_t mcp23s17_2_config = {
-        // CSのGPIOの番号を設定 
-        .cs_io = PIN_NUM_CS2,
         // 使用するSPIのペリフェラルを設定
         .host = MCP23S17_HOST,
+        // CSのGPIOの番号を設定 
+        .cs_io = PIN_NUM_CS2,
         // MISOのGPIOの番号を設定
         .miso_io = PIN_NUM_MISO,
     };
@@ -71,34 +72,12 @@ void mcp23s17_init(void){
     ret = spi_mcp23s17_init(&mcp23s17_2_config, &mcp23s17_2_handle);
     ESP_ERROR_CHECK(ret);
 
-    // SPIの書き込み許可
-    ret = spi_mcp23s17_write_enable(mcp23s17_handle);
-    ESP_ERROR_CHECK(ret);
+    // バッファの確保
+    spi_buf = (uint8_t *)heap_caps_malloc(64, MALLOC_CAP_8BIT);
 
-    const char test_str[] = "Hello World!";
-    ESP_LOGI(TAG, "Write: %s", test_str);
-    for (int i = 0; i < sizeof(test_str); i++) {
-        // No need for this EEPROM to erase before write.
-        ret = spi_mcp23s17_write(mcp23s17_handle, i, test_str[i]);
-        ESP_ERROR_CHECK(ret);
-    }
-
-    uint8_t test_buf[32] = "";
-    for (int i = 0; i < sizeof(test_str); i++) {
-        ret = spi_mcp23s17_read(mcp23s17_handle, i, &test_buf[i]);
-        ESP_ERROR_CHECK(ret);
-    }
-    ESP_LOGI(TAG, "Read: %s", test_buf);
-
-    ESP_LOGI(TAG, "Example finished.");
 }
-static const char TAG[] = "mcp23s17";
 
 
-// Workaround: The driver depends on some data in the flash and cannot be placed to DRAM easily for
-// now. Using the version in LL instead.
-#define gpio_set_level  gpio_set_level_patch
-#include "hal/gpio_ll.h"
 static inline esp_err_t gpio_set_level_patch(gpio_num_t gpio_num, uint32_t level)
 {
     gpio_ll_set_level(&GPIO, gpio_num, level);
@@ -126,7 +105,7 @@ static esp_err_t mcp23s17_wait_done(mcp23s17_context_t* ctx)
         gpio_intr_enable(ctx->cfg.miso_io);
 
         //Max processing time is 5ms, tick=1 may happen very soon, set to 2 at least
-        uint32_t tick_to_wait = MAX(mcp23s17_BUSY_TIMEOUT_MS / portTICK_PERIOD_MS, 2);
+        uint32_t tick_to_wait = MAX(MCP23S17_BUSY_TIMEOUT_MS / portTICK_PERIOD_MS, 2);
         BaseType_t ret = xSemaphoreTake(ctx->ready_sem, tick_to_wait);
         gpio_intr_disable(ctx->cfg.miso_io);
         gpio_set_level(ctx->cfg.cs_io, 0);
@@ -135,7 +114,7 @@ static esp_err_t mcp23s17_wait_done(mcp23s17_context_t* ctx)
     } else {
         bool timeout = true;
         gpio_set_level(ctx->cfg.cs_io, 1);
-        for (int i = 0; i < EEPROM_BUSY_TIMEOUT_MS * 1000; i ++) {
+        for (int i = 0; i < MCP23S17_BUSY_TIMEOUT_MS * 1000; i ++) {
             if (gpio_get_level(ctx->cfg.miso_io)) {
                 timeout = false;
                 break;
@@ -212,12 +191,18 @@ esp_err_t spi_mcp23s17_init(const mcp23s17_config_t *cfg, mcp23s17_context_t** o
         .command_bits = 0,
         .address_bits = 0,
 
-        // 通信時の周波数を設定
-        .clock_speed_hz = MCP23S17_CLK_FREQ,
-
         // SPIのモードを0に設定
         // CPOL: 0, CPHA: 0
         .mode = 0,          //SPI mode 0
+
+        // 通信時の周波数を設定
+        .clock_speed_hz = MCP23S17_CLK_FREQ,
+
+        // SCLK切り替えタイミングからスレーブ側のデータ送信が切り替わるタイミングまでの遅延時間をns単位で設定
+        // MCP23S17ではSCLKがLowに落ちた後にMISOが次のデータに切り替わるまで最大45nsかかる(2.7～5.5V)らしいので
+        // とりあえずクロック半周期分 + 45nsで設定しておく
+        .input_delay_ns = MCP23S17_INPUT_DELAY_NS,
+
         /*
          * The timing requirements to read the busy signal from the EEPROM cannot be easily emulated
          * by SPI transactions. We need to control CS pin by SW to check the busy signal manually.
@@ -227,99 +212,150 @@ esp_err_t spi_mcp23s17_init(const mcp23s17_config_t *cfg, mcp23s17_context_t** o
 
         // CSのGPIOの番号を設定
         .spics_io_num = cfg -> cs_io,
+
+        // 特殊な設定
+        // デフォルトではMSBが最初に送信される
+        // MCP23S17も同じなのでそのままにしておく(LSBを最初にする場合はSPI_DEVICE_TXBIT_LSBFIRST, SPI_DEVICE_RXBIT_LSBFIRSTを設定する)
+        // MOSIに送受信両方のデータを乗せる方式もあるらしい(SPI_DEVICE_3WIRE)
+        // アクティブの間CSピンをHiにする場合はSPI_DEVICE_POSITIVE_CSを設定する(MCP23S17ではLowなので設定しない)
+        // MCP23S17では送受信を同時に行わない(送信の後に受信)ので、SPI_DEVICE_HALFDUPLEXを設定する
+        // CSピンからクロックを出力する設定もあるらしい(SPI_DEVICE_CLK_AS_CS)
+        .flags = SPI_DEVICE_HALFDUPLEX,
+
+        // キューのサイズを設定
+        // とりあえず1にしておく
         .queue_size = 1,
-        .flags = SPI_DEVICE_HALFDUPLEX | SPI_DEVICE_POSITIVE_CS,
+
+        // 送信開始前に実行する関数を設定
         .pre_cb = cs_high,
+
+        // 送信完了後に実行する関数を設定
         .post_cb = cs_low,
-        .input_delay_ns = MCP23S17_INPUT_DELAY_NS,  //the EEPROM output the data half a SPI clock behind.
     };
-    //Attach the EEPROM to the SPI bus
+    // SPIバスにデバイスを追加する
     err = spi_bus_add_device(ctx->cfg.host, &devcfg, &ctx->spi);
-    if  (err != ESP_OK) {
-        goto cleanup;
+    // 失敗した場合
+    if (err != ESP_OK) {
+        // ctx->spiが存在すれば削除する
+        if (ctx->spi) {
+            spi_bus_remove_device(ctx->spi);
+            ctx->spi = NULL;
+        }
+        // ctx->ready_semが存在すれば削除する
+        if (ctx->ready_sem) {
+            vSemaphoreDelete(ctx->ready_sem);
+            ctx->ready_sem = NULL;
+        }
+        // ctxを削除(メモリ解放)する
+        free(ctx);
+        return err;
     }
 
+    // CSピンをLowに設定
     gpio_set_level(ctx->cfg.cs_io, 0);
+
+    // CSピンの設定
     gpio_config_t cs_cfg = {
+        // CSピンのGPIOの番号にビットマスクを設定?(このgpio_config_tで設定するピンをここで指定する?)
         .pin_bit_mask = BIT64(ctx->cfg.cs_io),
+        // CSピンを出力に設定
         .mode = GPIO_MODE_OUTPUT,
     };
+
+    // CSピンの設定を適用する
     gpio_config(&cs_cfg);
 
+    // 割り込み動作を使用する場合
     if (ctx->cfg.intr_used) {
+        // セマフォにバイナリセマフォを作成する
+        // バイナリセマフォは資源が使用可能かどうかを0か1かで設定・判別する変数らしい
         ctx->ready_sem = xSemaphoreCreateBinary();
+
+        // セマフォの作成に失敗した場合
         if (ctx->ready_sem == NULL) {
+            // メモリがない旨のエラーを返す
             err = ESP_ERR_NO_MEM;
-            goto cleanup;
+            // ctx->spiが存在すれば削除する
+            if (ctx->spi) {
+                spi_bus_remove_device(ctx->spi);
+                ctx->spi = NULL;
+            }
+            // ctx->ready_semが存在すれば削除する
+            if (ctx->ready_sem) {
+                vSemaphoreDelete(ctx->ready_sem);
+                ctx->ready_sem = NULL;
+            }
+            // ctxを削除(メモリ解放)する
+            free(ctx);
+            return err;
         }
 
+        // MISOピンの立ち上がりエッジでGPIOの割り込みが発生するように設定する
         gpio_set_intr_type(ctx->cfg.miso_io, GPIO_INTR_POSEDGE);
+        
+        // 割り込みハンドラ(Interrupt Service Routine Handler)を追加する
         err = gpio_isr_handler_add(ctx->cfg.miso_io, ready_rising_isr, ctx);
+        // 失敗した場合
         if (err != ESP_OK) {
-            goto cleanup;
+            // ctx->spiが存在すれば削除する
+            if (ctx->spi) {
+                spi_bus_remove_device(ctx->spi);
+                ctx->spi = NULL;
+            }
+            // ctx->ready_semが存在すれば削除する
+            if (ctx->ready_sem) {
+                vSemaphoreDelete(ctx->ready_sem);
+                ctx->ready_sem = NULL;
+            }
+            // ctxを削除(メモリ解放)する
+            free(ctx);
+            return err;
         }
+
+        // MISOピンの割り込みを無効にしておく
         gpio_intr_disable(ctx->cfg.miso_io);
     }
     *out_ctx = ctx;
     return ESP_OK;
 
-cleanup:
-    if (ctx->spi) {
-        spi_bus_remove_device(ctx->spi);
-        ctx->spi = NULL;
-    }
-    if (ctx->ready_sem) {
-        vSemaphoreDelete(ctx->ready_sem);
-        ctx->ready_sem = NULL;
-    }
-    free(ctx);
-    return err;
+    
 }
 
-esp_err_t spi_mcp23s17_read(mcp23s17_context_t* ctx, uint8_t addr, uint8_t* out_data)
+
+
+// 以下、下記よりコピーし、改変
+// https://github.com/h1romas4/esp32-genesis-player/blob/master/components/mcp23s17/src/mcp23s17.c
+
+// MCP23S17内のレジスタとグループを送信データに変換する関数
+uint8_t mcp23s17_register(mcp23s17_reg_t reg, mcp23s17_gpio_t group)
 {
-    spi_transaction_t t = {
-        .cmd = CMD_READ | (addr & ADDR_MASK),
-        .rxlength = 8,
-        .flags = SPI_TRANS_USE_RXDATA,
-        .user = ctx,
-    };
-    esp_err_t err = spi_device_polling_transmit(ctx->spi, &t);
-    if (err!= ESP_OK) return err;
-
-    *out_data = t.rx_data[0];
-    return ESP_OK;
+   return (group == GPIOA)?(reg << 1): (reg << 1) | 1;
 }
 
-esp_err_t spi_mcp23s17_erase(mcp23s17_context_t* ctx, uint8_t addr)
+/**
+ * spi_write_byte.
+ *
+ * @see https://github.com/espressif/esp32-nesemu/blob/master/components/nofrendo-esp32/spi_lcd.c
+ */
+mcp23s17_err_t mcp23s17_write_register(mcp23s17_context_t* ctx, uint8_t addr, mcp23s17_reg_t reg, mcp23s17_gpio_t group, uint8_t data)
 {
     esp_err_t err;
+    uint8_t regpos = mcp23s17_register(reg, group);
+
     err = spi_device_acquire_bus(ctx->spi, portMAX_DELAY);
-    if (err != ESP_OK) return err;
-
-    err = mcp23s17_simple_cmd(ctx, CMD_ERASE | (addr & ADDR_MASK));
-
-    if (err == ESP_OK) {
-        err = mcp23s17_wait_done(ctx);
-    }
-
-    spi_device_release_bus(ctx->spi);
-    return err;
-}
-
-esp_err_t spi_mcp23s17_write(mcp23s17_context_t* ctx, uint8_t addr, uint8_t data)
-{
-    esp_err_t err;
-    err = spi_device_acquire_bus(ctx->spi, portMAX_DELAY);
-    if (err != ESP_OK) return err;
+    if (err != ESP_OK) return MCP23S17_ERR_FAIL;
 
     spi_transaction_t t = {
-        .cmd = CMD_WRITE | (addr & ADDR_MASK),
-        .length = 8,
+        // cmd, addrは使用しない
         .flags = SPI_TRANS_USE_TXDATA,
-        .tx_data = {data},
+        // データ長は24bit
+        // OPコード(スレーブアドレス+R/W)8bit + レジスタアドレス8bit + データ8bit
+        .length = 24,
         .user = ctx,
+        .tx_data = {addr, regpos, data, 0}
     };
+
+    // 送信
     err = spi_device_polling_transmit(ctx->spi, &t);
 
     if (err == ESP_OK) {
@@ -327,60 +363,38 @@ esp_err_t spi_mcp23s17_write(mcp23s17_context_t* ctx, uint8_t addr, uint8_t data
     }
 
     spi_device_release_bus(ctx->spi);
-    return err;
+    // return err;
+
+    return MCP23S17_ERR_OK;
 }
 
-esp_err_t spi_mcp23s17_write_enable(mcp23s17_context_t* ctx)
+mcp23s17_err_t mcp23s17_write_register_seq(mcp23s17_context_t* ctx, uint8_t addr, mcp23s17_reg_t reg, mcp23s17_gpio_t group, uint8_t *data, size_t size)
 {
-    return mcp23s17_simple_cmd(ctx, CMD_EWEN | ADD_EWEN);
-}
-
-esp_err_t spi_mcp23s17_write_disable(mcp23s17_context_t* ctx)
-{
-    return mcp23s17_simple_cmd(ctx, CMD_EWDS | ADD_EWDS);
-}
-
-esp_err_t spi_mcp23s17_erase_all(mcp23s17_context_t* ctx)
-{
-#if !CONFIG_EXAMPLE_5V_COMMANDS
-    //not supported in 3.3V VCC
-    ESP_LOGE(TAG, "erase all not supported by mcp23s17 under 3.3V VCC");
-    return ESP_ERR_NOT_SUPPORTED;
-#endif
+    // address + register + size <= 64 (4byte * 16)
+    // assert(size <= 62);
 
     esp_err_t err;
-    err = spi_device_acquire_bus(ctx->spi, portMAX_DELAY);
-    if (err != ESP_OK) return err;
+    uint8_t regpos = mcp23s17_register(reg, group);
 
-    err = mcp23s17_simple_cmd(ctx, CMD_ERAL | ADD_ERAL);
-
-    if (err == ESP_OK) {
-        err = mcp23s17_wait_done(ctx);
+    spi_buf[0] = addr;
+    spi_buf[1] = regpos;
+    for(uint8_t i = 0; i < size; i++) {
+        spi_buf[i + 2] = data[i];
     }
 
-    spi_device_release_bus(ctx->spi);
-    return err;
-}
 
-esp_err_t spi_mcp23s17_write_all(mcp23s17_context_t* ctx, uint8_t data)
-{
-#if !CONFIG_EXAMPLE_5V_COMMANDS
-    //not supported in 3.3V VCC
-    ESP_LOGE(TAG, "write all not supported by EEPROM under 3.3V VCC");
-    return ESP_ERR_NOT_SUPPORTED;
-#endif
-
-    esp_err_t err;
     err = spi_device_acquire_bus(ctx->spi, portMAX_DELAY);
-    if (err != ESP_OK) return err;
+    if (err != ESP_OK) return MCP23S17_ERR_FAIL;
 
     spi_transaction_t t = {
-        .cmd = CMD_WRAL | ADD_WRAL,
-        .length = 8,
-        .flags = SPI_TRANS_USE_TXDATA,
-        .tx_data = {data},
+        // cmd, addrは使用しない
+        // データ長を設定
+        // OPコード(スレーブアドレス+R/W)8bit + レジスタアドレス8bit + データ数 × 8bit
+        .length = 16 + 8 * size,
         .user = ctx,
+        .tx_buffer = spi_buf,
     };
+    // 送信
     err = spi_device_polling_transmit(ctx->spi, &t);
 
     if (err == ESP_OK) {
@@ -388,5 +402,6 @@ esp_err_t spi_mcp23s17_write_all(mcp23s17_context_t* ctx, uint8_t data)
     }
 
     spi_device_release_bus(ctx->spi);
-    return err;
+
+    return MCP23S17_ERR_OK;
 }
