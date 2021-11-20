@@ -1,0 +1,8 @@
+{
+	"files.associations": {
+		"spi_master.h": "c",
+		"periph_ctrl.h": "c",
+		"spi_common.h": "c",
+		"task.h": "c"
+	}
+}
