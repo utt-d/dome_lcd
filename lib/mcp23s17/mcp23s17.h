@@ -137,7 +137,7 @@ void ready_rising_isr(void* arg);
 esp_err_t spi_mcp23s17_deinit(mcp23s17_context_t* ctx);
 esp_err_t spi_mcp23s17_init(const mcp23s17_config_t *cfg, mcp23s17_context_t** out_ctx);
 static inline esp_err_t gpio_set_level_patch(gpio_num_t gpio_num, uint32_t level);
-mcp23s17_err_t mcp23s17_write_register(mcp23s17_context_t* ctx, uint8_t addr, mcp23s17_reg_t reg, mcp23s17_gpio_t group, uint8_t data);
-mcp23s17_err_t mcp23s17_write_register_seq(mcp23s17_context_t* ctx, uint8_t addr, mcp23s17_reg_t reg, mcp23s17_gpio_t group, uint8_t *data, size_t size);
+mcp23s17_err_t mcp23s17_write_register(uint8_t ch, uint8_t addr, mcp23s17_reg_t reg, mcp23s17_gpio_t group, uint8_t data);
+mcp23s17_err_t mcp23s17_write_register_seq(uint8_t ch, uint8_t addr, mcp23s17_reg_t reg, mcp23s17_gpio_t group, uint8_t *data, size_t size);
 
 #endif

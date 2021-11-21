@@ -5,6 +5,8 @@
 uint8_t *spi_buf;
 
 static const char TAG[] = "mcp23s17";
+mcp23s17_handle_t mcp23s17_1_handle;
+mcp23s17_handle_t mcp23s17_2_handle;
 
 // MCP23S17の初期化
 void mcp23s17_init(void){
@@ -61,9 +63,6 @@ void mcp23s17_init(void){
     mcp23s17_1_config.intr_used = true;
     mcp23s17_2_config.intr_used = true;
     gpio_install_isr_service(0);
-
-    mcp23s17_handle_t mcp23s17_1_handle;
-    mcp23s17_handle_t mcp23s17_2_handle;
 
     // SPIの初期化
     ESP_LOGI(TAG, "Initializing device...");
@@ -337,10 +336,25 @@ uint8_t mcp23s17_register(mcp23s17_reg_t reg, mcp23s17_gpio_t group)
  *
  * @see https://github.com/espressif/esp32-nesemu/blob/master/components/nofrendo-esp32/spi_lcd.c
  */
-mcp23s17_err_t mcp23s17_write_register(mcp23s17_context_t* ctx, uint8_t addr, mcp23s17_reg_t reg, mcp23s17_gpio_t group, uint8_t data)
+mcp23s17_err_t mcp23s17_write_register(uint8_t ch, uint8_t addr, mcp23s17_reg_t reg, mcp23s17_gpio_t group, uint8_t data)
 {
     esp_err_t err;
     uint8_t regpos = mcp23s17_register(reg, group);
+    mcp23s17_context_t* ctx;
+
+    switch (ch)
+    {
+    case 1:
+        ctx = mcp23s17_1_handle;
+        break;
+    case 2:
+        ctx = mcp23s17_2_handle;
+        break;
+    
+    default:
+        return;
+        break;
+    }
 
     err = spi_device_acquire_bus(ctx->spi, portMAX_DELAY);
     if (err != ESP_OK) return MCP23S17_ERR_FAIL;
@@ -368,13 +382,28 @@ mcp23s17_err_t mcp23s17_write_register(mcp23s17_context_t* ctx, uint8_t addr, mc
     return MCP23S17_ERR_OK;
 }
 
-mcp23s17_err_t mcp23s17_write_register_seq(mcp23s17_context_t* ctx, uint8_t addr, mcp23s17_reg_t reg, mcp23s17_gpio_t group, uint8_t *data, size_t size)
+mcp23s17_err_t mcp23s17_write_register_seq(uint8_t ch, uint8_t addr, mcp23s17_reg_t reg, mcp23s17_gpio_t group, uint8_t *data, size_t size)
 {
     // address + register + size <= 64 (4byte * 16)
     // assert(size <= 62);
 
     esp_err_t err;
     uint8_t regpos = mcp23s17_register(reg, group);
+    mcp23s17_context_t* ctx;
+
+    switch (ch)
+    {
+    case 1:
+        ctx = mcp23s17_1_handle;
+        break;
+    case 2:
+        ctx = mcp23s17_2_handle;
+        break;
+    
+    default:
+        return;
+        break;
+    }
 
     spi_buf[0] = addr;
     spi_buf[1] = regpos;
