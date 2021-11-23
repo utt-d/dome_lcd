@@ -7,6 +7,8 @@
 		"array": "cpp",
 		"string": "cpp",
 		"string_view": "cpp",
-		"*.ipp": "cpp"
+		"*.ipp": "cpp",
+		"spi_periph.h": "c",
+		"spi_types.h": "c"
 	}
 }

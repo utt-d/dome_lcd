@@ -226,10 +226,10 @@ esp_err_t spi_mcp23s17_init(const mcp23s17_config_t *cfg, mcp23s17_context_t** o
         .queue_size = 1,
 
         // 送信開始前に実行する関数を設定
-        .pre_cb = cs_high,
+        .pre_cb = cs_low,
 
         // 送信完了後に実行する関数を設定
-        .post_cb = cs_low,
+        .post_cb = cs_high,
     };
     // SPIバスにデバイスを追加する
     err = spi_bus_add_device(ctx->cfg.host, &devcfg, &ctx->spi);
