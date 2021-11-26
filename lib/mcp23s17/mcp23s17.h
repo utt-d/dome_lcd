@@ -50,7 +50,8 @@
 #define MCP23S17_BUSY_TIMEOUT_MS  5
 
 #define MCP23S17_CLK_FREQ         (10*1000*1000)   //When powered by 3.3V, MCP23S17 max freq is 10MHz
-#define MCP23S17_INPUT_DELAY_NS   ((1000*1000*1000/MCP23S17_CLK_FREQ)/2+45)
+// #define MCP23S17_INPUT_DELAY_NS   ((1000*1000*1000/MCP23S17_CLK_FREQ)/2+45)
+#define MCP23S17_INPUT_DELAY_NS   0
 
 
 // https://github.com/h1romas4/esp32-genesis-player/blob/master/components/mcp23s17/src/mcp23s17.h

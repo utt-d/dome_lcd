@@ -35,7 +35,8 @@ void mcp23s17_init(void){
     // SPIバスの初期化
     // 今回はDMAを使用するので、第三引数にSPI_DMA_CH_AUTOを指定
     // DMAを使用しない場合はSPI_DMA_DISABLEDを指定する
-    ret = spi_bus_initialize(MCP23S17_HOST, &buscfg, SPI_DMA_CH_AUTO);
+    // DMAを使用しないほうが通信が速くなるとのことなので、DMAを使用しない設定に変更
+    ret = spi_bus_initialize(MCP23S17_HOST, &buscfg, SPI_DMA_DISABLED);
 
     // SPIバス初期化後のエラーを確認
     ESP_ERROR_CHECK(ret);
@@ -63,6 +64,7 @@ void mcp23s17_init(void){
     mcp23s17_1_config.intr_used = true;
     mcp23s17_2_config.intr_used = true;
     gpio_install_isr_service(0);
+    
 
     // SPIの初期化
     ESP_LOGI(TAG, "Initializing device...");
@@ -96,7 +98,7 @@ static esp_err_t mcp23s17_simple_cmd(mcp23s17_context_t *ctx, uint16_t cmd)
 static esp_err_t mcp23s17_wait_done(mcp23s17_context_t* ctx)
 {
     //have to keep cs low for 250ns
-    usleep(1);
+    // usleep(1);
     //clear signal
     if (ctx->cfg.intr_used) {
         xSemaphoreTake(ctx->ready_sem, 0);
@@ -106,6 +108,7 @@ static esp_err_t mcp23s17_wait_done(mcp23s17_context_t* ctx)
         //Max processing time is 5ms, tick=1 may happen very soon, set to 2 at least
         uint32_t tick_to_wait = MAX(MCP23S17_BUSY_TIMEOUT_MS / portTICK_PERIOD_MS, 2);
         BaseType_t ret = xSemaphoreTake(ctx->ready_sem, tick_to_wait);
+        // ESP_LOGI(TAG, "err:0x%4x", ret);
         gpio_intr_disable(ctx->cfg.miso_io);
         gpio_set_level(ctx->cfg.cs_io, 0);
 
@@ -219,7 +222,8 @@ esp_err_t spi_mcp23s17_init(const mcp23s17_config_t *cfg, mcp23s17_context_t** o
         // アクティブの間CSピンをHiにする場合はSPI_DEVICE_POSITIVE_CSを設定する(MCP23S17ではLowなので設定しない)
         // MCP23S17では送受信を同時に行わない(送信の後に受信)ので、SPI_DEVICE_HALFDUPLEXを設定する
         // CSピンからクロックを出力する設定もあるらしい(SPI_DEVICE_CLK_AS_CS)
-        .flags = SPI_DEVICE_HALFDUPLEX,
+        // SPI_DEVICE_HALFDUPLEX(半二重)の場合、ダミービットが自動的に挿入されてしまうので、無効にする場合はSPI_DEVICE_NO_DUMMYを設定する
+        .flags = SPI_DEVICE_HALFDUPLEX | SPI_DEVICE_NO_DUMMY,
 
         // キューのサイズを設定
         // とりあえず1にしておく
@@ -346,12 +350,15 @@ mcp23s17_err_t mcp23s17_write_register(uint8_t ch, uint8_t addr, mcp23s17_reg_t 
     {
     case 1:
         ctx = mcp23s17_1_handle;
+        ESP_LOGI(TAG, "ch1");
         break;
     case 2:
         ctx = mcp23s17_2_handle;
+        ESP_LOGI(TAG, "ch2");
         break;
     
     default:
+        ESP_LOGI(TAG, "ch none");
         return;
         break;
     }
@@ -373,10 +380,11 @@ mcp23s17_err_t mcp23s17_write_register(uint8_t ch, uint8_t addr, mcp23s17_reg_t 
     err = spi_device_polling_transmit(ctx->spi, &t);
 
     if (err == ESP_OK) {
-        err = mcp23s17_wait_done(ctx);
+        // err = mcp23s17_wait_done(ctx);
     }
 
     spi_device_release_bus(ctx->spi);
+    ESP_LOGI(TAG, "wrote");
     // return err;
 
     return MCP23S17_ERR_OK;
@@ -427,7 +435,7 @@ mcp23s17_err_t mcp23s17_write_register_seq(uint8_t ch, uint8_t addr, mcp23s17_re
     err = spi_device_polling_transmit(ctx->spi, &t);
 
     if (err == ESP_OK) {
-        err = mcp23s17_wait_done(ctx);
+        // err = mcp23s17_wait_done(ctx);
     }
 
     spi_device_release_bus(ctx->spi);

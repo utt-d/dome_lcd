@@ -1,5 +1,6 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <esp_log.h>
 #include <mcp23s17.h>
 #include "data.h"
 
@@ -13,6 +14,8 @@
 
 // LCD表示用のRGBのバッファ(RGB565形式)
 static uint16_t* g_lcd_buf;
+
+// static const char TAG[] = "log";
 
 
 // void loadImage(void *image, int x, int y, int w, int h){
@@ -31,14 +34,14 @@ void update1HSYNCWithoutDE(uint8_t c_data){
 		// 強制的にCLKをHigh, HSYNCをLow, DEをLowにする
 		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, (c_data & 0x1B) | 0x01);
 		// 強制的にCLKをLow, HSYNCをLow, DEをLowにする
-		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, (c_data & 0x1B) & 0x00);
+		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, (c_data & 0x1B) & 0xFE);
 	}
 	
 	for(c=0;c<CLK_1HSYNC_HIGH;c++){
 		// 強制的にCLKをHigh, HSYNCをHigh, DEをLowにする
 		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, ((c_data & 0x1B) | 0x04) | 0x01);
 		// 強制的にCLKをLow, HSYNCをHigh, DEをLowにする
-		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, ((c_data & 0x1B) | 0x04) & 0x00);
+		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, ((c_data & 0x1B) | 0x04) & 0xFE);
 	}
 }
 
@@ -55,24 +58,25 @@ void update1HSYNCWithDE(uint16_t g_lcd_h_data[LCD_H_SIZE], uint8_t c_data){
 		// 強制的にCLKをHigh, HSYNCをLow, DEをLowにする
 		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, (c_data & 0x1B) | 0x01);
 		// 強制的にCLKをLow, HSYNCをLow, DEをLowにする
-		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, (c_data & 0x1B) & 0x00);
+		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, (c_data & 0x1B) & 0xFE);
 	}
 	
 	for(c=0;c<CLK_DE_PRE_LOW-CLK_1HSYNC_LOW;c++){
 		// 強制的にCLKをHigh, HSYNCをHigh, DEをLowにする
 		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, ((c_data & 0x1B) | 0x04) | 0x01);
 		// 強制的にCLKをLow, HSYNCをHigh, DEをLowにする
-		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, ((c_data & 0x1B) | 0x04) & 0x00);
+		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, ((c_data & 0x1B) | 0x04) & 0xFE);
 	}
 	
 	for(c=0;c<CLK_DUMMY_DE_HIGH;c++){
 		// 強制的にCLKをHigh, HSYNCをHigh, DEをHighにする
 		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, (c_data | 0x24) | 0x01);
 		// 強制的にCLKをLow, HSYNCをHigh, DEをHighにする
-		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, (c_data | 0x24) & 0x00);
+		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, (c_data | 0x24) & 0xFE);
 	}
 
 	for(c=0;c<LCD_H_SIZE;c++){
+		// ESP_LOGI(TAG, "%04x: %04x", &(g_lcd_h_data[c]), g_lcd_h_data[c]);
 		// RGBデータを出力する
 		mcp23s17_write_register(2, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOA, (g_lcd_h_data[c] & 0xF800) >> 11);
 		mcp23s17_write_register(2, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, (g_lcd_h_data[c] & 0x07E0) >> 5);
@@ -80,7 +84,7 @@ void update1HSYNCWithDE(uint16_t g_lcd_h_data[LCD_H_SIZE], uint8_t c_data){
 		// 強制的にCLKをHigh, HSYNCをHigh, DEをHighにする
 		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, (c_data | 0x24) | 0x01);
 		// 強制的にCLKをLow, HSYNCをHigh, DEをHighにする
-		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, (c_data | 0x24) & 0x00);
+		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, (c_data | 0x24) & 0xFE);
 	}
 
 	// 強制的にRGBをLowにする
@@ -92,14 +96,14 @@ void update1HSYNCWithDE(uint16_t g_lcd_h_data[LCD_H_SIZE], uint8_t c_data){
 		// 強制的にCLKをHigh, HSYNCをHigh, DEをHighにする
 		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, (c_data | 0x24) | 0x01);
 		// 強制的にCLKをLow, HSYNCをHigh, DEをHighにする
-		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, (c_data | 0x24) & 0x00);
+		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, (c_data | 0x24) & 0xFE);
 	}
 
 	for(c=0;c<CLK_1HSYNC_LOW+CLK_1HSYNC_HIGH-CLK_DE_PRE_LOW-CLK_DE_HIGH;c++){
 		// 強制的にCLKをHigh, HSYNCをHigh, DEをLowにする
 		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, ((c_data & 0x1B) | 0x04) | 0x01);
 		// 強制的にCLKをLow, HSYNCをHigh, DEをLowにする
-		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, ((c_data & 0x1B) | 0x04) & 0x00);
+		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, ((c_data & 0x1B) | 0x04) & 0xFE);
 	}
 }
 
@@ -116,28 +120,28 @@ void update1HSYNCWithDEDummy(uint8_t c_data){
 		// 強制的にCLKをHigh, HSYNCをLow, DEをLowにする
 		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, (c_data & 0x1B) | 0x01);
 		// 強制的にCLKをLow, HSYNCをLow, DEをLowにする
-		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, (c_data & 0x1B) & 0x00);
+		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, (c_data & 0x1B) & 0xFE);
 	}
 	
 	for(c=0;c<CLK_DE_PRE_LOW-CLK_1HSYNC_LOW;c++){
 		// 強制的にCLKをHigh, HSYNCをHigh, DEをLowにする
 		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, ((c_data & 0x1B) | 0x04) | 0x01);
 		// 強制的にCLKをLow, HSYNCをHigh, DEをLowにする
-		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, ((c_data & 0x1B) | 0x04) & 0x00);
+		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, ((c_data & 0x1B) | 0x04) & 0xFE);
 	}
 	
 	for(c=0;c<CLK_DUMMY_DE_HIGH;c++){
 		// 強制的にCLKをHigh, HSYNCをHigh, DEをHighにする
 		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, (c_data | 0x24) | 0x01);
 		// 強制的にCLKをLow, HSYNCをHigh, DEをHighにする
-		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, (c_data | 0x24) & 0x00);
+		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, (c_data | 0x24) & 0xFE);
 	}
 
 	for(c=0;c<LCD_H_SIZE;c++){
 		// 強制的にCLKをHigh, HSYNCをHigh, DEをHighにする
 		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, (c_data | 0x24) | 0x01);
 		// 強制的にCLKをLow, HSYNCをHigh, DEをHighにする
-		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, (c_data | 0x24) & 0x00);
+		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, (c_data | 0x24) & 0xFE);
 	}
 
 	// 強制的にRGBをLowにする
@@ -149,14 +153,14 @@ void update1HSYNCWithDEDummy(uint8_t c_data){
 		// 強制的にCLKをHigh, HSYNCをHigh, DEをHighにする
 		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, (c_data | 0x24) | 0x01);
 		// 強制的にCLKをLow, HSYNCをHigh, DEをHighにする
-		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, (c_data | 0x24) & 0x00);
+		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, (c_data | 0x24) & 0xFE);
 	}
 
 	for(c=0;c<CLK_1HSYNC_LOW+CLK_1HSYNC_HIGH-CLK_DE_PRE_LOW-CLK_DE_HIGH;c++){
 		// 強制的にCLKをHigh, HSYNCをHigh, DEをLowにする
 		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, ((c_data & 0x1B) | 0x04) | 0x01);
 		// 強制的にCLKをLow, HSYNCをHigh, DEをLowにする
-		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, ((c_data & 0x1B) | 0x04) & 0x00);
+		mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, ((c_data & 0x1B) | 0x04) & 0xFE);
 	}
 }
 
@@ -210,7 +214,8 @@ void update1HSYNCWithDEDummy(uint8_t c_data){
 	// 6.RGB信号に62CLKの時間だけダミーデータを入力する
 	// 7.1行ごとに3番目から6番目まで実行.196行目まで繰り返す
 	for(v=0;v<LCD_V_SIZE;v++){
-		update1HSYNCWithDE(&(g_lcd_buf[v]), 0x02);
+		// ESP_LOGI(TAG, "%04x", &(g_lcd_buf[v]));
+		update1HSYNCWithDE(&g_lcd_buf[v*LCD_H_SIZE], 0x02);
 	}
 
 	// 8.DE, RGB信号に22HSYNCの時間だけダミーデータを入力する
@@ -220,29 +225,56 @@ void update1HSYNCWithDEDummy(uint8_t c_data){
 
  }
 
-
-
-void app_main() {
+void loop(void* pvParameters){
 	mcp23s17_init();
 	// make all I/O's output
 	mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_IODIR, GPIOA, 0x00);
-	mcp23s17_write_register(2, MCP23S17_DEFAULT_ADDR, MCP23S17_IODIR, GPIOA, 0x00);
 	mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_IODIR, GPIOB, 0x00);
+	mcp23s17_write_register(2, MCP23S17_DEFAULT_ADDR, MCP23S17_IODIR, GPIOA, 0x00);
 	mcp23s17_write_register(2, MCP23S17_DEFAULT_ADDR, MCP23S17_IODIR, GPIOB, 0x00);
     // set byte mode and seq mode
 	mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_IOCON, GPIOA, 0b00100000);
+	mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_IOCON, GPIOB, 0b00100000);
 	mcp23s17_write_register(2, MCP23S17_DEFAULT_ADDR, MCP23S17_IOCON, GPIOA, 0b00100000);
+	mcp23s17_write_register(2, MCP23S17_DEFAULT_ADDR, MCP23S17_IOCON, GPIOB, 0b00100000);
     // all bit HIGH
     mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOA, 0xff);
     mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, 0xff);
     mcp23s17_write_register(2, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOA, 0xff);
     mcp23s17_write_register(2, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, 0xff);
 
+	// while(1){
+	// // 	// ESP_LOGI(TAG, "toggled");
+	// 	ets_delay_us(1000000);
+    // 	mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOA, 0x01);
+    // 	mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, 0x01);
+    // 	mcp23s17_write_register(2, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOA, 0x01);
+    // 	mcp23s17_write_register(2, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, 0x01);
+	// 	ets_delay_us(1000000);
+    // 	mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOA, 0x00);
+    // 	mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, 0x00);
+    // 	mcp23s17_write_register(2, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOA, 0x00);
+    // 	mcp23s17_write_register(2, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, 0x00);
+		
+	// 	ESP_LOGI(TAG, "toggled");
+	// 	ets_delay_us(500000);
+    // 	mcp23s17_write_register(2, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, 0x40);
+	// 	ets_delay_us(500000);
+    // 	mcp23s17_write_register(2, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, 0x00);
+	// 	// ets_delay_us(1000000);
+	// 	// mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_IODIR, GPIOB, 0x00);
+	}
+
 	g_lcd_buf = img;
 
 	while(1){
+  	//   mcp23s17_write_register(1, MCP23S17_DEFAULT_ADDR, MCP23S17_GPIO, GPIOB, 0x00);
 		updateLCD();
+		// vTaskDelay(1);
 	}
+}
 
 
+void app_main() {
+	xTaskCreatePinnedToCore(loop, "loop", 8192, (void*) 0, (tskIDLE_PRIORITY + 1), NULL, 0);
 }
